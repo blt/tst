@@ -19,16 +19,12 @@ partial_matches(Str, TST) ->
 
 -spec partial_matches(string(), tst(), string()) -> [{word,nonempty_string()}].
 partial_matches([], empty, Accum) ->
-    io:format("empty~n"),
     [{word, Accum}];
 partial_matches([], #tst_node{}, _Accum) ->
-    io:format("no match~n"),
     [];
 partial_matches(_Word, empty, _Accum) ->
-    io:format("empty~n"),
     [];
 partial_matches(Word=[$.|Rest], TST=#tst_node{nodeChar=C}, Accum) ->
-    io:format("~w :: ~w :: ~w~n", [Word, TST, Accum]),
     Less = partial_matches(Word, TST#tst_node.ltTST, Accum),
     Equal = partial_matches(Rest, TST#tst_node.eqTST, [C|Accum]),
     Greater = partial_matches(Word, TST#tst_node.gtTST, Accum),
