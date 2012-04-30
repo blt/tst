@@ -1,0 +1,13 @@
+{application, tst,
+ [
+  {description, "tst"},
+  {vsn, "1.0.0"},
+  {modules, []},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { tst, []}},
+  {env, []}
+ ]}.
