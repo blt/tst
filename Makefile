@@ -1,20 +1,30 @@
 REBAR=`which rebar || which ./rebar`
 DIALYZER=`which dialyzer`
-CTRUN=`which ct_run`
 
 all: deps compile
+
 deps:
 	@$(REBAR) get-deps
+
 compile:
 	@$(REBAR) compile
-dialyze: compile
-	@$(DIALYZER) -q -n ebin -Wunmatched_returns -Werror_handling -Wrace_conditions
-test: dialyze
-# We don't use rebar's facilities because of a bug in rebar/proper
-# interaction. Read more here: https://github.com/manopapad/proper/issues/14
+
+app.plt:
+	@$(DIALYZER) --build_plt --output_plt app.plt --apps erts kernel stdlib crypto
+
+dialyze: app.plt compile
+	@$(DIALYZER) -q --plt app.plt ebin -Wunmatched_returns \
+		-Werror_handling -Wrace_conditions -Wno_undefined_callbacks
+
+test: compile
+	@${REBAR} eunit skip_deps=true verbose=0
 	@-mkdir -p logs/
-	@$(CTRUN) -pa ebin/ deps/*/ebin/ -dir test/ -logdir logs/
+	@${REBAR} ct skip_deps=true verbose=0
+
+validate: dialyze test
+
 clean:
+	@$(RM) -rf deps/
 	@$(REBAR) clean
 
-.PHONY: all test clean dialyze deps
+.PHONY: all test clean validate dialyze deps

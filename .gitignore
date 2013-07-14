@@ -1,4 +1,13 @@
-logs/
-ebin/
-deps/
+## compiled files
+##
 *.beam
+*.app
+
+## dependencies
+##
+deps/
+
+## test files
+.eunit
+app.plt
+logs
