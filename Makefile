@@ -18,8 +18,6 @@ dialyze: app.plt compile
 
 test: compile
 	@${REBAR} eunit skip_deps=true verbose=0
-	@-mkdir -p logs/
-	@${REBAR} ct skip_deps=true verbose=0
 
 validate: dialyze test
 
