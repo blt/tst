@@ -362,9 +362,11 @@ benchmark_test_() ->
               "%% ================================================================~n",
               []),
 
-    {ok, Dictionary} = file:read_file("/usr/share/dict/words"),
+    UnixDict = filename:absname_join(code:priv_dir(tst), "words"),
+
+    {ok, Dictionary} = file:read_file(UnixDict),
     Words = shuffle(lists:map(fun binary_to_list/1,
-                                   binary:split(Dictionary, <<"\n">>, [global]))),
+                              binary:split(Dictionary, <<"\n">>, [global]))),
     [_, _, _, _, _, _, _, _, _, _, Word | _] = Words,
 
     {timeout, 60, [

@@ -12,6 +12,7 @@ in-memory TSTs. The following operations are supported:
   * membership testing (`tst:contains/2`)
   * insertion (`tst:insert/2`)
   * partial match searches (`tst:partial_matches/2`)
+  * near neighbor searches (`tst:near_neighbors/3`)
   * word size of given tree (`tst:wc/1`)
   * coercion from list of strings (`tst:from_list/1`)
 
