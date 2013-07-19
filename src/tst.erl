@@ -4,6 +4,7 @@
          from_list/1,
          insert/2,
          partial_matches/2,
+         near_neighbors/3,
          wc/1
         ]).
 
@@ -21,6 +22,15 @@
 %% ===================================================================
 %%  API
 %% ===================================================================
+
+-spec near_neighbors(Word::string(), TST::tst(), Distance::integer()) -> [string()].
+%% @doc Rreturn a list of all words within Distance Hamming distance of Word.
+%%
+%% The Hamming distance of two strings is defined as the number of substitutions
+%% needed to transform one into the other. "b" into "b" requires zero, "b" into
+%% "a" one and "bee" into "fog" three, for example.
+near_neighbors(Word, TST, Dist) ->
+    lists:map(fun to_str/1, lists:flatten(near(to_ziplist(Word), TST, Dist))).
 
 -spec partial_matches(Pattern::string(), TST::tst()) -> [string()].
 %% @doc Return a list of partial match strings for the given Pattern.
@@ -138,12 +148,74 @@ partial_matches({_L, C, _R}=Zip, WordAcc, N=#nd{data=D, is_word=_B}) when C > D 
 partial_matches({_L, C, _R}=Zip, WordAcc, N=#nd{data=C, is_word=_B}) ->
     partial_matches(zipfwd(Zip), WordAcc, N#nd.eq).
 
+-spec near(Word::ziplist(), TST::tst(), Distance::integer()) -> [ziplist()].
+near(end_of_string, _TST, _Dist) ->
+    [];
+near(_Word, empty, _Dist) ->
+    [];
+near(_Word, _TST, Dist) when Dist < 0 ->
+    [];
+
+near({_L, C, []}=Word, #nd{data=C, is_word=true}, _Dist) ->
+    [Word];
+near({_L, C, []}=Word, #nd{data=D, is_word=true}=TST, Dist) when C =/= D ->
+    [
+     near(Word, TST#nd.lt, Dist),
+     ziprepl(Word, D),
+     near(Word, TST#nd.gt, Dist)
+    ];
+near({_L, C, _R}=Word, #nd{data=D, is_word=_Bool}=TST, Dist) ->
+    {EqWord, EqDist} = case C =:= D of
+                           true  -> {zipfwd(Word), Dist};
+                           false -> {zipfwd(ziprepl(Word, D)), Dist-1}
+                       end,
+
+    [
+     near(Word,   TST#nd.lt, Dist),
+     near(EqWord, TST#nd.eq, EqDist),
+     near(Word,   TST#nd.gt, Dist)
+    ].
+
 %% ===================================================================
 %%  Tests
 %% ===================================================================
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+
+near_neighbors_test_() ->
+    Words    = ["b", "berries", "bat", "aat", "cat", "bet", "pet", "parries", "z"],
+
+    TST = from_list(Words),
+
+    [
+     ?_assertMatch([], near_neighbors("b", empty, 2)),
+     ?_assertMatch([], near_neighbors("b", TST, -1)),
+
+     { "identy searches",
+       [
+        ?_assertMatch(["bat"], near_neighbors("bat", TST, 0)),
+        ?_assertMatch(["aat"], near_neighbors("aat", TST, 0))
+       ]
+     },
+
+     { "near searches",
+       [
+        ?_assertMatch(["aat", "bat", "bet", "cat"],
+                      near_neighbors("bat", TST, 1)),
+        ?_assertMatch(["aat", "bat", "bet", "cat", "pet"],
+                      near_neighbors("bat", TST, 2)),
+        ?_assertMatch(["berries"],
+                      near_neighbors("berries", TST, 1)),
+        ?_assertMatch(["berries", "parries"],
+                      near_neighbors("berries", TST, 2)),
+        ?_assertMatch(["b", "z"],
+                      near_neighbors("z", TST, 1)),
+        ?_assertMatch([],
+                      near_neighbors("not_in_tree", TST, 2))
+       ]
+     }
+    ].
 
 partial_matches_test_() ->
     Words = ["b", "a", "ab", "bb", "bat", "rax", "bath", "bad", "daz", "bed", ""],
