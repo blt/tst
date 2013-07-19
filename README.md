@@ -16,9 +16,9 @@ in-memory TSTs. The following operations are supported:
   * word size of given tree (`tst:wc/1`)
   * coercion from list of strings (`tst:from_list/1`)
 
-Binaries are not supported, though this is an intended feature. A
-nearest-neighbor search is also an intended feature. This TST is case-sensitive.
-The words "moose", "Moose" and "MoOsE" are all considered distinct words.
+Binaries are not supported, though this is an intended feature. This TST is
+case-sensitive. The words "moose", "Moose" and "MoOsE" are all considered
+distinct words.
 
 ## Example
 
