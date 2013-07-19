@@ -127,6 +127,8 @@ to_str({[], Cur, Right}) ->
     [Cur | Right].
 
 -spec partial_matches(Zip::ziplist(), Acc::[ziplist()], tst()) -> [ziplist()].
+partial_matches(end_of_string, _, _TST) ->
+    [];
 partial_matches(_, _, empty) ->
     [];
 partial_matches({_L, $., []}=Zip, WordAcc, N=#nd{data=C, is_word=true}) ->
@@ -344,5 +346,46 @@ word_count_test_() ->
      ?_assertMatch(2, wc(from_list(["brian", "briAN"]))),
      ?_assertMatch(5, wc(from_list(["batman", "doesn't", "afraid", "of", "anything"])))
     ].
+
+shuffle(L) ->
+    [X||{_,X} <- lists:sort([ {random:uniform(), N} || N <- L])].
+
+time(Mod, Fun, Args) ->
+    {Time, Value} = timer:tc(Mod, Fun, Args),
+    ?debugFmt("~p:~p/~p :: ~.3f seconds", [Mod, Fun, length(Args),
+                                           Time*0.000001]),
+    Value.
+
+benchmark_test_() ->
+    ?debugFmt("~n%% ================================================================~n"
+              "%%  Benchmarks~n"
+              "%% ================================================================~n",
+              []),
+
+    {ok, Dictionary} = file:read_file("/usr/share/dict/words"),
+    Words = shuffle(lists:map(fun binary_to_list/1,
+                                   binary:split(Dictionary, <<"\n">>, [global]))),
+    [_, _, _, _, _, _, _, _, _, _, Word | _] = Words,
+
+    {timeout, 60, [
+                   fun() ->
+                           DictTST = time(tst, from_list, [Words]),
+                           TST = time(tst, insert, ["TheRainInSpain", DictTST]),
+
+                           true = time(tst, contains, [Word, TST]),
+
+                           _ = time(tst, partial_matches, [".e.d", TST]),
+
+                           _ = time(tst, near_neighbors, [Word, TST, 0]),
+                           _ = time(tst, near_neighbors, [Word, TST, 1]),
+                           _ = time(tst, near_neighbors, [Word, TST, 2]),
+                           _ = time(tst, near_neighbors, [Word, TST, 3]),
+                           _ = time(tst, near_neighbors, [Word, TST, 4]),
+                           _ = time(tst, near_neighbors, [Word, TST, 5]),
+                           _ = time(tst, near_neighbors, [Word, TST, 6]),
+                           _ = time(tst, near_neighbors, [Word, TST, 7])
+                   end
+                  ]
+    }.
 
 -endif.
