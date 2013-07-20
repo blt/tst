@@ -15,6 +15,7 @@ in-memory TSTs. The following operations are supported:
   * near neighbor searches (`tst:near_neighbors/3`)
   * word size of given tree (`tst:wc/1`)
   * coercion from list of strings (`tst:from_list/1`)
+  * coercion to list of strings (`tst:to_list/1`)
 
 Binaries are not supported, though this is an intended feature. This TST is
 case-sensitive. The words "moose", "Moose" and "MoOsE" are all considered
@@ -35,9 +36,34 @@ true
 ["goose","moose"]
 4> tst:partial_matches(".o.se", TST).
 ["goose","house","moose"]
+5> tst:to_list(TST).
+["computer","goose","house","moose"]
+6> tst:to_list(tst:insert("abba", TST)).
+["abba","computer","goose","house","moose"]
 ```
 
 Please see in-line documentation and in-line test cases for more.
+
+## Future Work
+
+Because `tst` uses Erlang strings--lists of machine words as
+character--internally to represent strings the search tree will consume more
+memory than reading the source words into memory as binaries would. Consider:
+
+```
+> du -sh priv/words
+priv/words    2.4M
+```
+
+The test suite reads this file in to run benchmarks; the size of the TST
+generated from `priv/words` is reported in megabytes.
+
+```
+src/tst.erl:459:<0.50.0>: TST size :: 42.339 megabytes
+```
+
+Future work will attempt to get the resulting TST to consume no more than the
+same amount of memory as an on-disk representation.
 
 - - -
 
