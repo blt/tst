@@ -5,7 +5,8 @@
          insert/2,
          partial_matches/2,
          near_neighbors/3,
-         wc/1
+         wc/1,
+         to_list/1
         ]).
 
 -record(nd, {
@@ -23,8 +24,16 @@
 %%  API
 %% ===================================================================
 
+-spec to_list(TST::tst()) -> [string()].
+%% @doc Return a list of all words in the TST.
+%%
+%% This is a structural inverse of from_list/1, save that the order of the
+%% original list is not guaranteed to be preserved.
+to_list(TST) ->
+    lists:map(fun to_str/1, lists:flatten(to_list(TST, {empty, []}))).
+
 -spec near_neighbors(Word::string(), TST::tst(), Distance::integer()) -> [string()].
-%% @doc Rreturn a list of all words within Distance Hamming distance of Word.
+%% @doc Return a list of all words within Distance Hamming distance of Word.
 %%
 %% The Hamming distance of two strings is defined as the number of substitutions
 %% needed to transform one into the other. "b" into "b" requires zero, "b" into
@@ -82,7 +91,7 @@ insert([C], empty) ->
 insert([C|Rest], empty) ->
     #nd{data=C, eq=insert(Rest, empty)};
 insert([C], #nd{data=C}=N) ->
-    N;
+    N#nd{is_word=true};
 insert([C|Rest], #nd{data=C, eq=E}=N) ->
     N#nd{eq=insert(Rest, E)};
 insert([C|_Rest]=S, #nd{data=D, lt=L}=N) when C < D ->
@@ -113,6 +122,12 @@ zipfwd({_Left, _Cur, []}) ->
     end_of_string;
 zipfwd({Left, Cur, [C|Rest]}) ->
     {[Cur|Left], C, Rest}.
+
+-spec zipins(ziplist(), char()) -> ziplist().
+zipins(empty, C) ->
+    {[], C, []};
+zipins({Left, Cur, Right}, C) ->
+    {[Cur|Left], C, Right}.
 
 -spec ziprepl(ziplist(), char()) -> ziplist().
 ziprepl({Left, _Cur, Right}, Char) ->
@@ -178,12 +193,47 @@ near({_L, C, _R}=Word, #nd{data=D, is_word=_Bool}=TST, Dist) ->
      near(Word,   TST#nd.gt, Dist)
     ].
 
+-spec to_list(TST::tst(), Acc::{ziplist(), [ziplist()]}) -> [ziplist()].
+to_list(empty, {_, Words}) ->
+    Words;
+to_list(#nd{data=C, is_word=Bool}=TST, {Cur, Words}) ->
+    Word = zipins(Cur, C),
+    EqWords = case Bool of
+                  true  -> [Word|Words];
+                  false -> Words
+              end,
+    [
+     to_list(TST#nd.lt, {Cur, []}),
+     to_list(TST#nd.eq, {Word, EqWords}),
+     to_list(TST#nd.gt, {Cur, []})
+    ].
+
 %% ===================================================================
 %%  Tests
 %% ===================================================================
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+
+to_list_test_() ->
+    [
+     { "simple examples",
+       [
+        ?_assertMatch([],
+                      to_list(empty)),
+        ?_assertMatch(["a"],
+                      to_list(from_list(["a"]))),
+        ?_assertMatch(["ab", "a"],
+                      to_list(from_list(["a", "ab"]))),
+        ?_assertMatch(["ab", "a", "ba", "b", "zap!"],
+                      to_list(from_list(["b", "ab", "a", "zap!", "ba"]))),
+        ?_assertMatch(["aba", "aca", "ada"],
+                      to_list(from_list(["aca", "aba", "ada"]))),
+        ?_assertMatch(["aba", "aca", "ac", "ada"],
+                      to_list(from_list(["aca", "ac", "aba", "ada"])))
+       ]
+     }
+    ].
 
 near_neighbors_test_() ->
     Words    = ["b", "berries", "bat", "aat", "cat", "bet", "pet", "parries", "z"],
@@ -266,6 +316,13 @@ ziplist_test_() ->
         ?_assertMatch({[$b, $a], $c, []}, ziprepl({[$b, $a], $d, []}, $c))
        ]
      },
+     { "character insertion",
+       [
+        ?_assertMatch({[], $a, []}, zipins(empty, $a)),
+        ?_assertMatch({[$a], $b, []}, zipins({[], $a, []}, $b)),
+        ?_assertMatch({[$b, $a], $c, []}, zipins({[$a], $b, []}, $c))
+       ]
+     },
      { "forward movement",
        [
         ?_assertMatch(end_of_string,      zipfwd({[$a, $b], $t, ""})),
@@ -316,6 +373,19 @@ insertion_test_() ->
                                   is_word=true}
                           },
 
+    B = #nd{data=98, is_word=true},
+    B_AB = #nd{data=98,
+               lt=#nd{data=97,
+                      eq=#nd{data=98, is_word=true}
+                     },
+               is_word=true},
+    B_AB_A = #nd{data=98,
+                 lt=#nd{data=97,
+                        eq=#nd{data=98, is_word=true},
+                        is_word=true
+                       },
+                 is_word=true},
+
     [
      { "word by word inserts",
        [
@@ -327,7 +397,10 @@ insertion_test_() ->
         ?_assertMatch(TenTwenty_Five,     insert([5], TenTwenty)),
         ?_assertMatch(TenTwenty_FiveFour, insert([5, 4], TenTwenty)),
         ?_assertMatch(TenTwenty_Thirty,   insert([30], TenTwenty)),
-        ?_assertMatch(TenTwenty_TenTen,   insert([10,10], TenTwenty))
+        ?_assertMatch(TenTwenty_TenTen,   insert([10,10], TenTwenty)),
+        ?_assertMatch(B,                  insert("b", empty)),
+        ?_assertMatch(B_AB,               insert("ab", B)),
+        ?_assertMatch(B_AB_A,             insert("a", B_AB))
        ]
      },
      { "bulk word inserts",
@@ -335,6 +408,7 @@ insertion_test_() ->
         ?_assertMatch(TenTwenty_TenTen,   from_list([[10,20], [10,10]])),
         ?_assertMatch(TenTwenty_Thirty,   from_list([[10,20], [30]])),
         ?_assertMatch(TenTwenty_FiveFour, from_list([[10,20], [5,4]]))
+
        ]
      }
     ].
@@ -347,8 +421,19 @@ word_count_test_() ->
      ?_assertMatch(5, wc(from_list(["batman", "doesn't", "afraid", "of", "anything"])))
     ].
 
-shuffle(L) ->
-    [X||{_,X} <- lists:sort([ {random:uniform(), N} || N <- L])].
+read_dictionary(unix) ->
+    read_dictionary("words");
+read_dictionary(Filename) when is_list(Filename) ->
+    Shuffle = fun(L) ->
+                      [X||{_,X} <- lists:sort([ {random:uniform(), N} || N <- L])]
+              end,
+
+    UnixDict = filename:absname_join(code:priv_dir(tst), Filename),
+
+    {ok, Dictionary} = file:read_file(UnixDict),
+    Shuffle(lists:filter(fun(E) -> E =/= [] end,
+                         lists:map(fun binary_to_list/1,
+                                   binary:split(Dictionary, <<"\n">>, [global])))).
 
 time(Mod, Fun, Args) ->
     {Time, Value} = timer:tc(Mod, Fun, Args),
@@ -356,25 +441,29 @@ time(Mod, Fun, Args) ->
                                            Time*0.000001]),
     Value.
 
+words_to_megabytes(MachineWords) ->
+    Bits = MachineWords * 8 * erlang:system_info(wordsize),
+    Bits / math:pow(2, 23).
+
 benchmark_test_() ->
-    ?debugFmt("~n%% ================================================================~n"
+    ?debugFmt("~n~n%% ================================================================~n"
               "%%  Benchmarks~n"
               "%% ================================================================~n",
               []),
-
-    UnixDict = filename:absname_join(code:priv_dir(tst), "words"),
-
-    {ok, Dictionary} = file:read_file(UnixDict),
-    Words = shuffle(lists:map(fun binary_to_list/1,
-                              binary:split(Dictionary, <<"\n">>, [global]))),
+    Words = read_dictionary(unix),
     [_, _, _, _, _, _, _, _, _, _, Word | _] = Words,
 
     {timeout, 60, [
                    fun() ->
-                           DictTST = time(tst, from_list, [Words]),
-                           TST = time(tst, insert, ["TheRainInSpain", DictTST]),
+                           TST = time(tst, from_list, [Words]),
+                           ?debugFmt("TST size :: ~.3f megabytes", [words_to_megabytes(erts_debug:flat_size(TST))]),
+
+                           _ = time(tst, insert, ["TheRainInSpain", TST]),
+                           TSTWords = time(tst, to_list, [TST]),
 
                            true = time(tst, contains, [Word, TST]),
+                           true = (length(lists:usort(Words)) =:= length(TSTWords)),
+                           true = (lists:usort(Words) =:= lists:usort(TSTWords)),
 
                            _ = time(tst, partial_matches, [".e.d", TST]),
 
